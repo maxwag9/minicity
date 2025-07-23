@@ -1,5 +1,11 @@
 import math
 
+tile_neighbor_offsets = [
+    (-1, -1), (0, -1), (1, -1),
+    (-1,  0), (0,  0), (1,  0),
+    (-1,  1), (0,  1), (1,  1)
+]
+
 
 def screen_space_to_tile_space(mouse_pos, offset_x, offset_y, zoom, tile_size):
     world_pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, zoom)
@@ -52,4 +58,26 @@ def calculate_distance(point1, point2):
 def get_vector(p1, p2):
     return p2[0] - p1[0], p2[1] - p1[1]
 
+def bezier_point(p0, p1, p2, t):
+    x = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t ** 2 * p2[0]
+    y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t ** 2 * p2[1]
+    return x, y
 
+def add_to_hovered_points_list(road, tile_to_point, new_id, road_points):
+    for point in road:
+        # road: [((tile_pos), (point_pos)),...]
+        # point: ((tile_pos), (point_pos))
+        tile_pos, point_pos = point
+        tile_positions = tile_to_point.keys()
+        # tile_positions: all tile positions (tile_pos)
+        if tile_pos in tile_positions:
+            road_ids = tile_to_point[tile_pos].keys()
+            if new_id in road_ids:
+                #print("Appended: ", (tile_pos, new_id))
+                road_points[3][tile_pos][new_id].append(point_pos)
+            else:
+                #print("Created: ", new_id)
+                road_points[3][tile_pos][new_id] = [point_pos]
+        else:
+            #print("Created: ", tile_pos, new_id)
+            road_points[3][tile_pos] = {new_id: [point_pos]}
