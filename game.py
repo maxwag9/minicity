@@ -25,6 +25,8 @@ def main():
     possible_hovered_road_points = []
 
     offset_x, offset_y = 0.0, 0.0
+    zoom_offset_x, zoom_offset_y = 0.0, 0.0 # modified during zooming
+    pan_offset_x, pan_offset_y = 0.0, 0.0  # modified during panning
     move_speed = 10
     current_zoom = 1.0
     target_zoom = 1.0
@@ -38,6 +40,7 @@ def main():
     while running:
         # Fill screen gray
         screen.fill((30, 30, 30))
+        offsets_to_add = [0.0, 0.0]
 
         # Input tick
         mouse_pos = pygame.mouse.get_pos()
@@ -55,13 +58,14 @@ def main():
         move_speed_zoom = move_speed / current_zoom
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            offset_x -= move_speed_zoom
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            offset_x += move_speed_zoom
+            offsets_to_add[0] -= move_speed_zoom
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            offsets_to_add[0] += move_speed_zoom
         if keys[pygame.K_UP] or keys[pygame.K_w]:
-            offset_y -= move_speed_zoom
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            offset_y += move_speed_zoom
+            offsets_to_add[1] -= move_speed_zoom
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            offsets_to_add[1] += move_speed_zoom
+
 
         for event in pygame.event.get():
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -90,9 +94,10 @@ def main():
                             temp_road_points = []
                             for point in road_points[0]:
                                 temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point))
-                            road, done = two_points_to_road(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
+                            road, done, state = two_points_to_road(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
                             road_points[1][new_id] = road
-                            road_points[2][new_id] = road, "straight_road"
+                            if not done:
+                                road_points[2][new_id] = road, "straight_road", state
                             road_points[3][road[0]] = new_id, road[1]
                             road_points[0] = []
                 elif tool_mode == "curved_road":
@@ -115,9 +120,10 @@ def main():
                             temp_road_points = []
                             for point in road_points[0]:
                                 temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point))
-                            road, done = three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
+                            road, done, state = three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
                             road_points[1][new_id] = road
-                            road_points[2][new_id] = road, "curved_road"
+                            if not done:
+                                road_points[2][new_id] = road, "curved_road", state
 
                             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
                             tile_to_point = road_points[3]
@@ -144,8 +150,8 @@ def main():
 
                 # Get mouse world position BEFORE zoom
                 mx, my = mouse_pos
-                wx = mx / current_zoom + offset_x
-                wy = my / current_zoom + offset_y
+                wx = mx / current_zoom + zoom_offset_x
+                wy = my / current_zoom + zoom_offset_y
 
                 zoom_anchor = (mx, my)
                 world_anchor = (wx, wy)
@@ -158,8 +164,17 @@ def main():
             current_zoom = lerp(current_zoom, target_zoom, zoom_speed)
             mx, my = zoom_anchor
             wx, wy = world_anchor
-            offset_x = wx - mx / current_zoom
-            offset_y = wy - my / current_zoom
+            # Recalculate world_anchor using current offset (before zoom update)
+            #wx = mx / current_zoom + offset_x
+            #wy = my / current_zoom + offset_y
+            zoom_offset_x = wx - mx / current_zoom
+            zoom_offset_y = wy - my / current_zoom
+
+        pan_offset_x += offsets_to_add[0]; pan_offset_y += offsets_to_add[1]
+        offset_x = zoom_offset_x + pan_offset_x
+        offset_y = zoom_offset_y + pan_offset_y
+
+
 
         # Draw screen (1 frame)
         ui.draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points)

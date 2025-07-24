@@ -2,22 +2,22 @@ from generator import two_points_to_road, three_points_to_road_curve
 from helper import tile_neighbor_offsets, add_to_hovered_points_list
 
 
+
 def build_road(dt, road_points, tile_size):
     roads_to_build = road_points[2]
     keys = list(roads_to_build.keys())
     for key in keys:
-        input_points, type = roads_to_build[key]
+        input_points, type, state = roads_to_build[key]
         if type == "straight_road":
-            road, done = two_points_to_road(input_points, road_points=input_points, tile_size=tile_size, instant=False)
+            road, done, state = two_points_to_road(input_points, road_points=input_points, tile_size=tile_size, instant=False, animated_points_per_tick=2)
         else:
-            road, done = three_points_to_road_curve(input_points, road_points=input_points, tile_size=tile_size, instant=False)
-
+            road, done, state = three_points_to_road_curve(input_points, road_points=input_points, tile_size=tile_size, instant=False, animated_points_per_tick=2, state=state)
         if done:
             # Road is done, remove it from list
             roads_to_build.pop(key, None)
         else:
             # Road is not done, keep it in list
-            roads_to_build[key] = road, type
+            roads_to_build[key] = road, type, state
         # Update Rendering list with new road points
         road_points[1][key] = road
         # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
