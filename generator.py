@@ -1,7 +1,7 @@
 from helper import calculate_distance, world_space_to_tile_space, bezier_point
 
 
-def two_points_to_road(world_space_points, resolution=30, road_points=None, tile_size=25, instant=True, animated_points_per_tick=2):
+def two_points_to_road(world_space_points, resolution=30, road_points=None, tile_size=25, instant=True, animated_points_per_tick=2, point_size=5):
     if road_points is None:
         road_points = []
 
@@ -18,7 +18,7 @@ def two_points_to_road(world_space_points, resolution=30, road_points=None, tile
                 (point_1[0] + dx * t, point_1[1] + dy * t),
                 tile_size,
                 tile_snapping=True),
-            (point_1[0] + dx * t, point_1[1] + dy * t)
+            (point_1[0] + dx * t, point_1[1] + dy * t), point_size
         ) for i in range(point_amount + 1) for t in [i * step]]
         return road_points, True, None
 
@@ -29,7 +29,7 @@ def two_points_to_road(world_space_points, resolution=30, road_points=None, tile
         t = current_index / point_amount
         x, y = point_1[0] + dx * t, point_1[1] + dy * t
         tx, ty = world_space_to_tile_space((x, y), tile_size, tile_snapping=True)
-        road_points.append(((tx, ty), (x, y)))
+        road_points.append(((tx, ty), (x, y), point_size))
         current_index += 1
 
     return road_points, current_index > point_amount, None
@@ -42,7 +42,7 @@ def three_points_to_road_curve(world_space_points,
                                tile_size=25,
                                instant=False,
                                animated_points_per_tick=2,
-                               state=None):
+                               state=None, point_size=5):
     if road_points is None:
         road_points = []
     done = False
@@ -57,7 +57,7 @@ def three_points_to_road_curve(world_space_points,
         candidate_t = t
         result = []
         last_pt = bezier_point(p0, p1, p2, t)
-        result.append((world_space_to_tile_space(last_pt, tile_size, True), last_pt))
+        result.append((world_space_to_tile_space(last_pt, tile_size, True), last_pt, point_size))
 
         min_dist = distance_to_last_point * 0.75
         max_step = 0.25
@@ -84,7 +84,7 @@ def three_points_to_road_curve(world_space_points,
                 break
 
             pt = bezier_point(p0, p1, p2, candidate_t)
-            result.append((world_space_to_tile_space(pt, tile_size, True), pt))
+            result.append((world_space_to_tile_space(pt, tile_size, True), pt, point_size))
             last_pt = pt
             t = candidate_t
 
@@ -94,7 +94,7 @@ def three_points_to_road_curve(world_space_points,
     if state is None:
         t = 0.0
         last_pt = bezier_point(p0, p1, p2, 0)
-        road_points.append((world_space_to_tile_space(last_pt, tile_size, True), last_pt))
+        road_points.append((world_space_to_tile_space(last_pt, tile_size, True), last_pt, point_size))
     else:
         t, last_pt = state
 
@@ -130,7 +130,7 @@ def three_points_to_road_curve(world_space_points,
 
         pt = candidate_pt
         t = candidate_t
-        road_points.append((world_space_to_tile_space(pt, tile_size, True), pt))
+        road_points.append((world_space_to_tile_space(pt, tile_size, True), pt, point_size))
         last_pt = pt
         added += 1
 

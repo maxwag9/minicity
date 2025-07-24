@@ -23,10 +23,13 @@ def main():
     # current_road_points, drawing_road_points, roads_to_build, tile_to_point
     road_points = [[], {}, {}, {}]
     possible_hovered_road_points = []
+    hovered_points = []
+    point_size = 5
 
     offset_x, offset_y = 0.0, 0.0
     zoom_offset_x, zoom_offset_y = 0.0, 0.0 # modified during zooming
     pan_offset_x, pan_offset_y = 0.0, 0.0  # modified during panning
+
     move_speed = 10
     current_zoom = 1.0
     target_zoom = 1.0
@@ -48,7 +51,7 @@ def main():
         # hovered_point =
         # Simulation tick
         if (tick_counter & 0b10) == 0:
-            possible_hovered_road_points = simulation.tick(dt, road_points, tile_size, hovered_tile)
+            possible_hovered_road_points, hovered_points = simulation.tick(dt, road_points, mouse_pos, tile_size, hovered_tile, offset_x, offset_y, current_zoom)
 
 
 
@@ -93,12 +96,14 @@ def main():
                                 new_id += 1
                             temp_road_points = []
                             for point in road_points[0]:
-                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point))
-                            road, done, state = two_points_to_road(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
+                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point, point_size))
+                            road, done, state = two_points_to_road(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False, point_size=point_size)
                             road_points[1][new_id] = road
                             if not done:
                                 road_points[2][new_id] = road, "straight_road", state
                             road_points[3][road[0]] = new_id, road[1]
+                            tile_to_point = road_points[3]
+                            helper.add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
                             road_points[0] = []
                 elif tool_mode == "curved_road":
                     if event.button == 1:
@@ -119,15 +124,15 @@ def main():
                                 new_id += 1
                             temp_road_points = []
                             for point in road_points[0]:
-                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point))
-                            road, done, state = three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False)
+                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point, point_size))
+                            road, done, state = three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False, point_size=point_size)
                             road_points[1][new_id] = road
                             if not done:
                                 road_points[2][new_id] = road, "curved_road", state
 
                             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
                             tile_to_point = road_points[3]
-                            helper.add_to_hovered_points_list(road, tile_to_point, new_id, road_points)
+                            helper.add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
                             road_points[0] = []
 
 
@@ -174,10 +179,11 @@ def main():
         offset_x = zoom_offset_x + pan_offset_x
         offset_y = zoom_offset_y + pan_offset_y
 
+        #hovered_road_points = helper.find_hovered_points(road_points, mouse_pos, offset_x, offset_y, current_zoom, tile_size)
 
 
         # Draw screen (1 frame)
-        ui.draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points)
+        ui.draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points, hovered_points)
 
         # Get time difference between last frame and now
         last_time = current_time

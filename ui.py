@@ -11,7 +11,7 @@ tile_types={
 }
 
 
-def draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points):
+def draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points, hovered_points):
     all_tiles = game_map.get_all_tiles(screen)
     zoomed_tile_size = tile_size * current_zoom
 
@@ -37,11 +37,16 @@ def draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_
                 road_point = single_road_point[1]
                 pygame.draw.circle(screen, (20, 120, 230), helper.world_space_to_screen_space(road_point, offset_x, offset_y, current_zoom), 5 * current_zoom)
     if tool_mode == "straight_road":
-        pygame.draw.circle(screen, (20, 230, 230), mouse_pos, 7 * current_zoom)
-    if tool_mode == "curved_road":
-        pygame.draw.circle(screen, (200, 230, 230), mouse_pos, 7 * current_zoom)
+        pygame.draw.circle(screen, (20, 230, 230), mouse_pos, 7 * current_zoom, 2)
+    elif tool_mode == "curved_road":
+        pygame.draw.circle(screen, (200, 230, 230), mouse_pos, 7 * current_zoom, 2)
     if possible_hovered_road_points:
-        for world_pos in possible_hovered_road_points:
-            pygame.draw.circle(screen, (200, 120, 230),
+        for world_pos, _ in possible_hovered_road_points:
+            pygame.draw.circle(screen, (20, 120, 230),
+                               helper.world_space_to_screen_space(world_pos, offset_x, offset_y, current_zoom),
+                               8 * current_zoom)
+    if hovered_points:
+        for world_pos, _ in hovered_points:
+            pygame.draw.circle(screen, (200, 220, 230),
                                helper.world_space_to_screen_space(world_pos, offset_x, offset_y, current_zoom),
                                8 * current_zoom)

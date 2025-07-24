@@ -63,21 +63,25 @@ def bezier_point(p0, p1, p2, t):
     y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t ** 2 * p2[1]
     return x, y
 
-def add_to_hovered_points_list(road, tile_to_point, new_id, road_points):
+def add_to_tile_to_points_list(road, tile_to_point, new_id, road_points):
     for point in road:
         # road: [((tile_pos), (point_pos)),...]
         # point: ((tile_pos), (point_pos))
-        tile_pos, point_pos = point
+        tile_pos, point_pos, point_size = point
         tile_positions = tile_to_point.keys()
         # tile_positions: all tile positions (tile_pos)
         if tile_pos in tile_positions:
             road_ids = tile_to_point[tile_pos].keys()
             if new_id in road_ids:
                 #print("Appended: ", (tile_pos, new_id))
-                road_points[3][tile_pos][new_id].append(point_pos)
+                road_points[3][tile_pos][new_id].append((point_pos, point_size))
             else:
                 #print("Created: ", new_id)
-                road_points[3][tile_pos][new_id] = [point_pos]
+                road_points[3][tile_pos][new_id] = [(point_pos, point_size)]
         else:
             #print("Created: ", tile_pos, new_id)
-            road_points[3][tile_pos] = {new_id: [point_pos]}
+            road_points[3][tile_pos] = {new_id: [(point_pos, point_size)]}
+
+
+
+
