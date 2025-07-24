@@ -8,7 +8,7 @@ Goal is to "Build a simplified city simulation prototype that simulates a tilema
 
 With that out of the way, let's get this interesting coding experiment started!
 
-Here is the telly page for my programming goals with this project:
+Here is the notion page for my programming goals with this project: https://www.notion.so/239d1f43448d8065995df2c790d2011f?v=239d1f43448d800d974f000cc08d8c04&source=copy_link
 
 
 Note that I only know python and will slowly get into rust. Any help is welcome!
