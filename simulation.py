@@ -1,60 +1,83 @@
-from generator import two_points_to_road, three_points_to_road_curve
-from helper import tile_neighbor_offsets, add_to_tile_to_points_list, screen_space_to_tile_space, \
-    screen_space_to_world_space, world_space_to_tile_space
+from helper import tile_neighbor_offsets, add_to_tile_to_points_list, screen_space_to_world_space, world_space_to_tile_space, remove_tight_points
+from roads import RoadManager
 
 
-def build_road(dt, road_points, tile_size):
-    roads_to_build = road_points[2]
-    keys = list(roads_to_build.keys())
-    for key in keys:
-        input_points, type, state = roads_to_build[key]
-        if type == "straight_road":
-            road, done, state = two_points_to_road(input_points, road_points=input_points, tile_size=tile_size, instant=False, animated_points_per_tick=2)
+def build_road(dt, road_points: RoadManager, tile_size):
+    roads_to_build = road_points.to_build
+
+    for road_id in list(roads_to_build.keys()):
+        input_points, road_type, state, building_speed = roads_to_build[road_id]
+
+        if road_type == "straight_road":
+            built_road, done, state, building_speed = road_points.two_points_to_road(state=state, road_points=input_points,
+                tile_size=tile_size,
+                animated_points_per_tick=building_speed
+            )
         else:
-            road, done, state = three_points_to_road_curve(input_points, road_points=input_points, tile_size=tile_size, instant=False, animated_points_per_tick=2, state=state)
+            built_road, done, state, building_speed = road_points.three_points_to_road_curve(
+                input_points, road_points=input_points,
+                tile_size=tile_size,
+                animated_points_per_tick=building_speed, state=state
+            )
+
         if done:
-            # Road is done, remove it from list
-            roads_to_build.pop(key, None)
+            del roads_to_build[road_id]
         else:
-            # Road is not done, keep it in list
-            roads_to_build[key] = road, type, state
-        # Update Rendering list with new road points
-        road_points[1][key] = road
-        # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
-        tile_to_point = road_points[3]
-        new_id = key
-        add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
+            roads_to_build[road_id] = built_road, road_type, state, building_speed
+
+        # Update visual rendering data
+        road_points.drawing[road_id] = built_road
+
+        # Update spatial partitioning
+        tile_to_point = road_points.tile_to_point
+        add_to_tile_to_points_list(built_road, tile_to_point, road_id, road_points)
 
 
-def find_hovered_points(tile_hovered_points, mouse_pos_world):
-    hovered_points = []
-    for point in tile_hovered_points:
-        point_pos, point_size = point
-        if abs(point_pos[0]-mouse_pos_world[0]) <= point_size*2 and abs(point_pos[1]-mouse_pos_world[1]) <= point_size*2:
-            hovered_points.append(point)
-    return hovered_points
+def find_hovered_points(points_to_check, mouse_pos_world):
+    hovered = []
+
+    for point in points_to_check:
+        dx = abs(point.pos[0] - mouse_pos_world[0])
+        dy = abs(point.pos[1] - mouse_pos_world[1])
+        if dx <= point.point_size * 1 and dy <= point.point_size * 1:
+            hovered.append(point)
+
+    return hovered
 
 
-def find_possible_hovered_road_points(hovered_tile, road_points):
-    possible_hovered_road_points = []
-    tile_to_point = road_points[3]
+
+def find_possible_hovered_road_points(hovered_tile, road_points: RoadManager):
+    # Return all road points within a 3x3 area around the hovered tile
+    tile_to_point = road_points.tile_to_point
+    nearby_points = []
+
     hx, hy = hovered_tile
-
     for dx, dy in tile_neighbor_offsets:
-        neighbor = (hx + dx, hy + dy)
-        if neighbor in tile_to_point:
-            for road in tile_to_point[neighbor].values():
-                possible_hovered_road_points.extend(road)
-    return possible_hovered_road_points
+        neighbor_tile = (hx + dx, hy + dy)
+        if neighbor_tile in tile_to_point:
+            road_dict = tile_to_point[neighbor_tile]
+            for points in road_dict.values():
+                nearby_points.extend(points)
+    return nearby_points
 
 
-def tick(dt, road_points, mouse_pos, tile_size, hovered_tile, offset_x, offset_y, current_zoom):
-    mouse_pos_world = screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
-    mouse_pos_tile = world_space_to_tile_space(mouse_pos_world, tile_size, True)
+
+def tick(dt, road_points: RoadManager, mouse_pos, tile_size, hovered_tile, offset_x, offset_y, current_zoom):
+    # Convert screen → world → tile
+    mouse_world_pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
+    mouse_tile_pos = world_space_to_tile_space(mouse_world_pos, tile_size, True)
+
+    # Build new road segments if needed
     build_road(dt, road_points, tile_size)
-    tile_hovered_points = find_possible_hovered_road_points(hovered_tile, road_points)
-    hovered_points = find_hovered_points(tile_hovered_points, mouse_pos_world)
 
-    return tile_hovered_points, hovered_points
+    # Get possible road points near mouse
+    nearby_points = find_possible_hovered_road_points(hovered_tile, road_points)
+
+    # Check which of those the mouse is actually over
+    hovered_points = find_hovered_points(nearby_points, mouse_world_pos)
+
+
+    return nearby_points, hovered_points
+
 
 

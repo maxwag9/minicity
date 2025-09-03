@@ -4,30 +4,30 @@ import helper
 import simulation
 import tilemap
 import ui
-from generator import two_points_to_road, three_points_to_road_curve
-from helper import world_space_to_tile_space
+from helper import world_space_to_tile_space, remove_point_from_map
+from roads import RoadManager
 
 
 def main():
     pygame.init()
 
-
     screen = pygame.display.set_mode((1920, 1080))
 
     clock = pygame.time.Clock()
-    current_time = clock.get_time(); dt = 0
+    current_time = clock.get_time()
+    dt = 0
 
     game_map = tilemap.TileMap(16)
 
-    tool_mode = "curved_road"
+    tool_mode = "straight_road"
     # current_road_points, drawing_road_points, roads_to_build, tile_to_point
-    road_points = [[], {}, {}, {}]
+    road_points = RoadManager()
     possible_hovered_road_points = []
     hovered_points = []
     point_size = 5
 
     offset_x, offset_y = 0.0, 0.0
-    zoom_offset_x, zoom_offset_y = 0.0, 0.0 # modified during zooming
+    zoom_offset_x, zoom_offset_y = 0.0, 0.0  # modified during zooming
     pan_offset_x, pan_offset_y = 0.0, 0.0  # modified during panning
 
     move_speed = 10
@@ -51,12 +51,9 @@ def main():
         # hovered_point =
         # Simulation tick
         if (tick_counter & 0b10) == 0:
-            possible_hovered_road_points, hovered_points = simulation.tick(dt, road_points, mouse_pos, tile_size, hovered_tile, offset_x, offset_y, current_zoom)
-
-
-
-
-
+            possible_hovered_road_points, hovered_points = simulation.tick(dt, road_points, mouse_pos, tile_size,
+                                                                           hovered_tile, offset_x, offset_y,
+                                                                           current_zoom)
 
         move_speed_zoom = move_speed / current_zoom
         keys = pygame.key.get_pressed()
@@ -69,10 +66,11 @@ def main():
         elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
             offsets_to_add[1] += move_speed_zoom
 
-
         for event in pygame.event.get():
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if tool_mode == "zoning":
+                if tool_mode == "delete":
+                    remove_point_from_map(road_points, hovered_points)
+                elif tool_mode == "zoning":
                     if event.button == 3:
                         game_map.place_tile(hovered_tile[0], hovered_tile[1], "residential")
                     elif event.button == 2:
@@ -81,60 +79,12 @@ def main():
                         game_map.place_tile(hovered_tile[0], hovered_tile[1], "industrial")
                 elif tool_mode == "straight_road":
                     if event.button == 1:
-                        pos = helper.screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
-                        # Build road with 2 points; A -> B
-                        if len(road_points[0]) == 0:
-                            # Point A
-                            road_points[0].append(pos)
-                        elif len(road_points[0]) == 1:
-                            # Point B
-                            road_points[0].append(pos)
+                        road_points.build_road(tool_mode, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points)
 
-                            used_ids = set(road_points[1].keys())
-                            new_id = 0
-                            while new_id in used_ids:
-                                new_id += 1
-                            temp_road_points = []
-                            for point in road_points[0]:
-                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point, point_size))
-                            road, done, state = two_points_to_road(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False, point_size=point_size)
-                            road_points[1][new_id] = road
-                            if not done:
-                                road_points[2][new_id] = road, "straight_road", state
-                            road_points[3][road[0]] = new_id, road[1]
-                            tile_to_point = road_points[3]
-                            helper.add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
-                            road_points[0] = []
                 elif tool_mode == "curved_road":
                     if event.button == 1:
-                        pos = helper.screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
-                        # Build road with 3 points; A -> B -> C with curve, B as anchor
-                        if len(road_points[0]) == 0:
-                            # Point A
-                            road_points[0].append(pos)
-                        elif len(road_points[0]) == 1:
-                            # Point B
-                            road_points[0].append(pos)
-                        elif len(road_points[0]) == 2:
-                            # Point C
-                            road_points[0].append(pos)
-                            used_ids = set(road_points[1].keys())
-                            new_id = 0
-                            while new_id in used_ids:
-                                new_id += 1
-                            temp_road_points = []
-                            for point in road_points[0]:
-                                temp_road_points.append((world_space_to_tile_space(point, tile_size, True), point, point_size))
-                            road, done, state = three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, instant=False, point_size=point_size)
-                            road_points[1][new_id] = road
-                            if not done:
-                                road_points[2][new_id] = road, "curved_road", state
-
-                            # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
-                            tile_to_point = road_points[3]
-                            helper.add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
-                            road_points[0] = []
-
+                        road_points.build_road(tool_mode, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size,
+                                               road_points, hovered_points)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_q:
@@ -143,6 +93,8 @@ def main():
                     elif tool_mode == "straight_road":
                         tool_mode = "curved_road"
                     elif tool_mode == "curved_road":
+                        tool_mode = "delete"
+                    elif tool_mode == "delete":
                         tool_mode = "zoning"
 
                 elif event.key == pygame.K_ESCAPE:
@@ -175,15 +127,16 @@ def main():
             zoom_offset_x = wx - mx / current_zoom
             zoom_offset_y = wy - my / current_zoom
 
-        pan_offset_x += offsets_to_add[0]; pan_offset_y += offsets_to_add[1]
+        pan_offset_x += offsets_to_add[0]
+        pan_offset_y += offsets_to_add[1]
         offset_x = zoom_offset_x + pan_offset_x
         offset_y = zoom_offset_y + pan_offset_y
 
         #hovered_road_points = helper.find_hovered_points(road_points, mouse_pos, offset_x, offset_y, current_zoom, tile_size)
 
-
         # Draw screen (1 frame)
-        ui.draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos, tool_mode, possible_hovered_road_points, hovered_points)
+        ui.draw(screen, game_map, tile_size, offset_x, offset_y, current_zoom, hovered_tile, road_points, mouse_pos,
+                tool_mode, possible_hovered_road_points, hovered_points)
 
         # Get time difference between last frame and now
         last_time = current_time
@@ -192,6 +145,7 @@ def main():
         tick_counter += 1
         pygame.display.flip()
         clock.tick(100)
+
 
 if __name__ == "__main__":
     main()
