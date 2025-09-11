@@ -92,15 +92,45 @@ def add_to_tile_to_points_list(road, tile_to_point, new_id, road_points):
             #print("Created: ", tile_pos, new_id)
             road_points.tile_to_point[point.tile_pos] = {new_id: [point]}
 
+def replace_point_on_map(road_points, point_to_replace, points_to_add):
+    for point in points_to_add:
+        prior_destinations = []
+        prior_sources = []
+
+        for replaced_point in point_to_replace:
+            prior_destinations.extend(replaced_point.destinations)
+            prior_sources.extend(replaced_point.sources)
+        for replaced_point in point_to_replace:
+            if replaced_point in prior_destinations:
+                prior_destinations.remove(replaced_point)
+            if replaced_point in prior_sources:
+                prior_sources.remove(replaced_point)
+        point.destinations.extend(prior_destinations)
+        point.sources.extend(prior_sources)
+        for source_point in prior_sources:
+            source_point.destinations.append(point)
+        for destination_point in prior_destinations:
+            destination_point.sources.append(point)
+
+    remove_point_from_map(road_points=road_points, points=point_to_replace)
+
 
 def remove_point_from_map(road_points, points):
-    drawing = road_points.drawing  # road_id → list of (tile_pos, world_pos)
+    drawing = road_points.drawing  # road_id → list of (tile_pos, point_object)
     tile_to_point = road_points.tile_to_point  # tile_pos → {road_id: [(world_pos, size)]}
 
     for point_to_remove in points:
         for road_id, road in drawing.items():
             for i, point in enumerate(road):
                 if point_to_remove.pos == point.pos:
+                    connected_points = []
+                    connected_points.extend(road[i].destinations)
+                    connected_points.extend(road[i].sources)
+                    for connected_point in connected_points:
+                        if point in connected_point.sources:
+                            connected_point.sources.remove(point)
+                        if point in connected_point.destinations:
+                            connected_point.destinations.remove(point)
                     # remove from drawing road
                     del road[i]
 
@@ -117,9 +147,12 @@ def remove_point_from_map(road_points, points):
                     break  # Only remove once per hovered_pos
 
 
-def remove_tight_points(road_points, hovered_points=None):
+def remove_tight_points(road_points, points_to_add=None, hovered_points=None):
+    if points_to_add is None:
+        points_to_add = []
     points_to_remove = []
     current_road_points = road_points.current
+    #print("CURRENT: ", current_road_points)
     all_road_points = road_points.drawing
     if hovered_points:
         for hovered_point in hovered_points:
@@ -136,5 +169,14 @@ def remove_tight_points(road_points, hovered_points=None):
                     dy = abs(point.pos[1] - current_point.pos[1])
                     if dx <= point.point_size * 1 and dy <= point.point_size * 1:
                         points_to_remove.append(point)
-    print("Removing: ", points_to_remove)
-    remove_point_from_map(road_points, points_to_remove)
+    if not points_to_remove:
+        #print("No tight points found, skipping removal.")
+        return
+
+    if points_to_add:
+        #print("Removing hovered: ", points_to_remove)
+        #print("points_to_add: ", points_to_add)
+        replace_point_on_map(road_points, points_to_remove, points_to_add)
+    else:
+        #print("Removing: ", points_to_remove)
+        remove_point_from_map(road_points, points_to_remove)

@@ -11,62 +11,69 @@ class RoadManager:
         self.to_build = {}
         self.tile_to_point = {}
 
-    def build_road(self, road_type, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points, building_speed=0):
+    def build_road(self, road_type, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points, building_speed=1):
         pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
+        points_to_add = []
         anchor_point_amount = 0
         # Build road with 2 points; A -> B
         if len(self.current) == 0:
             # Point A
-            self.current.append(Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None))
+            point_a = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+            self.current.append(point_a)
             anchor_point_amount = 1
+            points_to_add.extend(self.current)
         elif len(self.current) == 1:
             # Point B
-            self.current.append(Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None))
+            point_b = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+            self.current.append(point_b)
             anchor_point_amount = 2
+            if self.current[0].pos != self.current[1].pos:
+                points_to_add.append(point_b)
         elif len(self.current) == 2:
-            if road_type == "curved_road":
+            if road_type[0] == "curved_road":
                 # Point C
-                self.current.append(Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None))
+                point_c = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+                self.current.append(point_c)
                 anchor_point_amount = 3
+                points_to_add.append(point_c)
 
 
-        if anchor_point_amount == 2 and road_type == "straight_road":
+        if anchor_point_amount == 2 and road_type[0] == "straight_road":
             used_ids = set(self.drawing.keys())
             new_id = 0
             while new_id in used_ids:
                 new_id += 1
-            temp_road_points = []
-            for point in self.current:
-                temp_road_points.append(Point(point.tile_pos, point.pos, point.point_size, None))
 
-            road, done, state, building_speed = self.two_points_to_road(state=(True, 0, temp_road_points.copy()), road_points=None, tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
+            temp_road_points = self.current.copy()
+
+            road, done, state, building_speed = self.two_points_to_road(road_manager=road_points, state=(True, 0, temp_road_points), tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
             self.drawing[new_id] = road
             if not done:
-                self.to_build[new_id] = road, "straight_road", state, building_speed
+                self.to_build[new_id] = road, road_type, state, building_speed
 
             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
             tile_to_point = self.tile_to_point
             add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
             self.current = []
 
-        elif anchor_point_amount == 3 and road_type == "curved_road":
+        elif anchor_point_amount == 3 and road_type[0] == "curved_road":
             used_ids = set(self.drawing.keys())
             new_id = 0
             while new_id in used_ids:
                 new_id += 1
-            temp_road_points = []
-            for point in self.current:
-                temp_road_points.append(Point(point.tile_pos, point.pos, point.point_size, None))
-            road, done, state, building_speed = self.three_points_to_road_curve(temp_road_points, road_points=temp_road_points, tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
+            temp_road_points = self.current.copy()
+            road, done, state, building_speed = self.three_points_to_road_curve(road_manager=road_points, state=(True, 0, temp_road_points), tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
             self.drawing[new_id] = road
             if not done:
-                self.to_build[new_id] = road, "curved_road", state, building_speed
+                self.to_build[new_id] = road, road_type, state, building_speed
 
             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
             tile_to_point = self.tile_to_point
             add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
             self.current = []
-        remove_tight_points(road_points, )
+        print(points_to_add)
+        remove_tight_points(road_points, points_to_add=points_to_add, hovered_points=hovered_points)
+
 
     def find_all_point_vectors_for_all_roads(self):
         for road in self.drawing:
@@ -85,16 +92,15 @@ class RoadManager:
                 road[i][4] = -vector
 
     @staticmethod
-    def two_points_to_road(
+    def two_points_to_road(road_manager,
             state=(True, 0, []),
-            resolution=30,
-            road_points=None,
+            resolution=25,
+            built_road_points=None,
             tile_size=25,
             animated_points_per_tick=2,
-            point_size=5
-    ):
-        if road_points is None:
-            road_points = []
+            point_size=5):
+        if built_road_points is None:
+            built_road_points = []
 
         start, current_index, two_points = state
         current_index = max(0, current_index)  # clamp to zero
@@ -114,34 +120,147 @@ class RoadManager:
             """Helper: create and append a Point, update previous vector if needed."""
             tile_pos = world_space_to_tile_space(pos, tile_size, tile_snapping=True)
             new_point = Point(tile_pos, pos, point_size, None)
-            road_points.append(new_point)
+            built_road_points.append(new_point)
+            add_vectors_from(with_vector_from, new_point)
 
+            #remove_tight_points(road_manager, [new_point])
+
+        def add_vectors_from(with_vector_from, point):
             if with_vector_from is not None:
-                prev_point = road_points[with_vector_from]
-                vec = get_vector(prev_point.pos, new_point.pos)
-                road_points[with_vector_from].vector = vec
+                prev_point = built_road_points[with_vector_from]
+                prev_point.destinations.append(point)
+                point.sources.append(prev_point)
+            return point
 
         # -----------------
         # Instant building
         # -----------------
         if animated_points_per_tick == 0:
             step = 1 / segment_count
-            road_points.clear()
+            built_road_points.clear()
 
-            for i in range(segment_count + 1):
-                pos = interpolate_point(i * step)
-                add_point(pos, with_vector_from=i - 1 if i > 0 else None)
+            built_road_points.append(two_points[0]) # Putting the first point in immediately
+            point_amount = 0
+            if segment_count > 2:
+                for i in range(1, segment_count): # +2 to skip making the first point again
+                    point_amount = i
+                    pos = interpolate_point(i * step)
+                    add_point(pos, with_vector_from=i - 1 if i > 0 else None)
+                built_road_points.append(add_vectors_from(point_amount, two_points[1]))  # Putting in the last point!
+            elif segment_count == 2:
+                built_road_points.append(add_vectors_from(point_amount, two_points[1]))  # Putting in the last point!
 
-            # Copy vector into last point so it isn't left empty
-            if len(road_points) >= 2:
-                road_points[-1].vector = road_points[-2].vector
-
-            return road_points, True, None, animated_points_per_tick
+            return built_road_points, True, None, animated_points_per_tick
 
         # -----------------
         # Animated building
         # -----------------
-        if len(road_points) == 2 and start:
+        if len(built_road_points) == 1 and start:
+            start = False
+
+        steps = 0
+        done = current_index > segment_count-1
+        if segment_count > 1:
+            if start:
+                built_road_points.append(two_points[0])  # Putting the first point in immediately
+                steps += 1
+                current_index += 1
+            elif done:
+                built_road_points.append(add_vectors_from(segment_count-1, two_points[1]))  # Putting in the last point!
+                current_index += 1
+            else:
+                while steps < animated_points_per_tick and current_index <= segment_count:
+                    t = current_index / segment_count
+                    pos = interpolate_point(t)
+
+                    add_point(
+                        pos,
+                        with_vector_from=len(built_road_points) - 1 if built_road_points else None
+                    )
+
+                    current_index += 1
+                    steps += 1
+        else:
+            built_road_points.append(two_points[0])  # Putting the first point in immediately
+            done = True
+
+        return built_road_points, done, (start, current_index, two_points), animated_points_per_tick
+
+    @staticmethod
+    def three_points_to_road_curve(road_manager,
+                                   state=(True, 0, []),
+                                   resolution=30,
+                                   built_road_points=None,
+                                   tile_size=25,
+                                   animated_points_per_tick=2,
+                                   point_size=5
+                                   ):
+        """
+        Builds a quadratic Bezier road between three control points.
+        state = (start, current_index, three_points)
+        """
+        if built_road_points is None:
+            built_road_points = []
+
+        start, current_index, three_points = state
+        current_index = max(0, current_index)  # clamp to zero
+        p0, p1, p2 = three_points[0].pos, three_points[1].pos, three_points[2].pos
+
+        # --- curve length estimate (linear sampling for now) ---
+        # we divide into segments similar to two_points_to_road
+        total_distance = 0
+        last_pt = bezier_point(p0, p1, p2, 0.0)
+        samples = 50
+        for i in range(1, samples + 1):
+            t = i / samples
+            pt = bezier_point(p0, p1, p2, t)
+            total_distance += calculate_distance(last_pt, pt)
+            last_pt = pt
+
+        segment_count = max(1, int(total_distance // resolution))
+
+        def interpolate_point(t: float) -> tuple[float, float]:
+            return bezier_point(p0, p1, p2, t)
+
+        def add_point(pos, with_vector_from=None):
+            """Helper: create and append a Point, update previous vector if needed."""
+            tile_pos = world_space_to_tile_space(pos, tile_size, tile_snapping=True)
+            new_point = Point(tile_pos, pos, point_size, None)
+            built_road_points.append(new_point)
+            add_vectors_from(with_vector_from, new_point)
+
+            #remove_tight_points(road_manager, [new_point])
+
+        def add_vectors_from(with_vector_from, point):
+            if with_vector_from is not None:
+                prev_point = built_road_points[with_vector_from]
+                prev_point.destinations.append(point)
+                point.sources.append(prev_point)
+            return point
+
+        # -----------------
+        # Instant building
+        # -----------------
+        if animated_points_per_tick == 0:
+            step = 1 / segment_count
+            built_road_points.clear()
+
+            built_road_points.append(three_points[0]) # Putting the first point in immediately
+            point_amount = 1
+
+            for i in range(1, segment_count + 1):
+                point_amount = i
+                pos = interpolate_point(i * step)
+                add_point(pos, with_vector_from=i - 1 if i > 0 else None)
+
+            built_road_points.append(add_vectors_from(point_amount, three_points[2])) # Putting in the last point!
+
+            return built_road_points, True, None, animated_points_per_tick
+
+        # -----------------
+        # Animated building
+        # -----------------
+        if len(built_road_points) == 2 and start:
             start = False
 
         steps = 0
@@ -151,130 +270,17 @@ class RoadManager:
 
             add_point(
                 pos,
-                with_vector_from=len(road_points) - 1 if road_points else None
+                with_vector_from=len(built_road_points) - 1 if built_road_points else None
             )
 
             current_index += 1
             steps += 1
 
         done = current_index > segment_count
-        if done and len(road_points) >= 2:
-            road_points[-1].vector = road_points[-2].vector
+        if done and len(built_road_points) >= 2:
+            built_road_points[-1].vector = built_road_points[-2].vector
 
-        return road_points, done, (start, current_index, two_points), animated_points_per_tick
-
-    @staticmethod
-    def three_points_to_road_curve(world_space_points,
-                                   distance_to_last_point=30,
-                                   road_points = None,
-                                   tile_size=25,
-                                   animated_points_per_tick=2,
-                                   state=None,
-                                   point_size=5):
-        if road_points is None:
-            road_points = []
-        done = False
-
-        p0 = world_space_points[0].pos
-        p1 = world_space_points[1].pos
-        p2 = world_space_points[2].pos
-
-        # === INSTANT MODE ===
-        if animated_points_per_tick==0:
-            t = 0.0
-            candidate_t = t
-            result = []
-            last_pt = bezier_point(p0, p1, p2, t)
-            result.append(Point(world_space_to_tile_space(last_pt, tile_size, True), last_pt, point_size, None))
-
-            min_dist = distance_to_last_point * 0.75
-            max_step = 0.25
-
-            while t < 1.0:
-                dt = 0.001
-                iteration = 0
-                max_iterations = 100
-                while dt < max_step and iteration < max_iterations:
-                    iteration += 1
-                    candidate_t = t + dt
-                    if candidate_t > 1.0:
-                        candidate_t = 1.0
-                    candidate_pt = bezier_point(p0, p1, p2, candidate_t)
-                    dist = calculate_distance(last_pt, candidate_pt)
-                    if dist >= distance_to_last_point:
-                        break
-                    elif dist < min_dist:
-                        dt *= 1.5
-                    else:
-                        break
-
-                if candidate_t > 1.0:
-                    break
-
-                pt = bezier_point(p0, p1, p2, candidate_t)
-                previous_point = result[len(result) - 1]
-                vector = get_vector(previous_point.pos, pt)
-                result[len(result) - 1] = Point(previous_point.tile_pos, previous_point.pos, previous_point.point_size, vector)
-                del previous_point
-                result.append(Point(world_space_to_tile_space(pt, tile_size, True), pt, point_size, None))
-                last_pt = pt
-                t = candidate_t
-            result.pop(1)
-            return result, True, None, animated_points_per_tick
-
-        # === ANIMATED MODE ===
-        if state is None:
-            t = 0.0
-            last_pt = bezier_point(p0, p1, p2, 0)
-            road_points.append(Point(world_space_to_tile_space(last_pt, tile_size, True), last_pt, point_size, None))
-        else:
-            t, last_pt = state
-
-        added = 0
-        min_dist = distance_to_last_point
-        max_step = 0.75
-        min_step = 1e-5
-        candidate_t = min_step
-
-        while t < 1.0 and added < animated_points_per_tick:
-            dt = 0.001
-            candidate_pt = (0, 0)
-            iteration = 0
-            max_iterations = 100
-
-            while dt < max_step and iteration < max_iterations:
-                iteration += 1
-                candidate_t = t + dt
-                if candidate_t > 1.0:
-                    candidate_t = 1.0
-                candidate_pt = bezier_point(p0, p1, p2, candidate_t)
-                dist = calculate_distance(last_pt, candidate_pt)
-                if dist >= distance_to_last_point * 1.2:
-                    break
-                elif dist < min_dist:
-                    dt *= 1.5
-                else:
-                    break
-
-            if candidate_t > 1.0:
-                done = True
-                break
-
-            pt = candidate_pt
-            t = candidate_t
-            previous_point = road_points[len(road_points) - 1]
-            vector = get_vector(previous_point.pos, pt)
-            road_points[len(road_points) - 1] = Point(previous_point.tile_pos, previous_point.pos, previous_point.point_size, vector)
-            del previous_point
-            road_points.append(Point(world_space_to_tile_space(pt, tile_size, True), pt, point_size, None))
-            last_pt = pt
-            added += 1
-
-        if t >= 1.0:
-            done = True
-            road_points.pop(1)
-        return road_points, done, (t, last_pt), animated_points_per_tick
-
+        return built_road_points, done, (start, current_index, three_points), animated_points_per_tick
 
     def reset(self):
         pass
@@ -282,7 +288,7 @@ class RoadManager:
 class Road:
     last_id = -1
 
-    def __init__(self, tile_pos, pos, point_size, vector):
+    def __init__(self, tile_pos, pos, point_size):
         Road.last_id += 1
         self.road_id = Road.last_id
         self.invisible = False
@@ -298,7 +304,8 @@ class Point:
         self.pos = pos
         self.tile_pos = tile_pos
 
-        self.surrounding_points = []
+        self.sources = []
+        self.destinations = []
         self.invisible = False
         self.no_vector_calculation = False
 

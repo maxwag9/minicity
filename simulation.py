@@ -8,14 +8,14 @@ def build_road(dt, road_points: RoadManager, tile_size):
     for road_id in list(roads_to_build.keys()):
         input_points, road_type, state, building_speed = roads_to_build[road_id]
 
-        if road_type == "straight_road":
-            built_road, done, state, building_speed = road_points.two_points_to_road(state=state, road_points=input_points,
-                tile_size=tile_size,
-                animated_points_per_tick=building_speed
-            )
+        if road_type[0] == "straight_road":
+            built_road, done, state, building_speed = road_points.two_points_to_road(road_manager=road_points, state=state, built_road_points=input_points,
+                                                                                     tile_size=tile_size,
+                                                                                     animated_points_per_tick=building_speed
+                                                                                     )
         else:
-            built_road, done, state, building_speed = road_points.three_points_to_road_curve(
-                input_points, road_points=input_points,
+            built_road, done, state, building_speed = road_points.three_points_to_road_curve(road_manager=road_points,
+                built_road_points=input_points,
                 tile_size=tile_size,
                 animated_points_per_tick=building_speed, state=state
             )

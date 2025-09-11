@@ -20,6 +20,7 @@ def main():
     game_map = tilemap.TileMap(16)
 
     tool_mode = "straight_road"
+    road_type = "2_lane_bidirectional"
     # current_road_points, drawing_road_points, roads_to_build, tile_to_point
     road_points = RoadManager()
     possible_hovered_road_points = []
@@ -79,11 +80,11 @@ def main():
                         game_map.place_tile(hovered_tile[0], hovered_tile[1], "industrial")
                 elif tool_mode == "straight_road":
                     if event.button == 1:
-                        road_points.build_road(tool_mode, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points)
+                        road_points.build_road((tool_mode, road_type), mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points)
 
                 elif tool_mode == "curved_road":
                     if event.button == 1:
-                        road_points.build_road(tool_mode, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size,
+                        road_points.build_road((tool_mode, road_type), mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size,
                                                road_points, hovered_points)
 
             elif event.type == pygame.KEYDOWN:
