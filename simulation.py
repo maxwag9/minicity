@@ -1,8 +1,8 @@
-from helper import tile_neighbor_offsets, add_to_tile_to_points_list, screen_space_to_world_space, world_space_to_tile_space, remove_tight_points
+from helper import *
 from roads import RoadManager
 
 
-def build_road(dt, road_points: RoadManager, tile_size):
+def build_road(dt, road_points: RoadManager):
     roads_to_build = road_points.to_build
 
     for road_id in list(roads_to_build.keys()):
@@ -10,13 +10,11 @@ def build_road(dt, road_points: RoadManager, tile_size):
 
         if road_type[0] == "straight_road":
             built_road, done, state, building_speed = road_points.two_points_to_road(road_manager=road_points, state=state, built_road_points=input_points,
-                                                                                     tile_size=tile_size,
                                                                                      animated_points_per_tick=building_speed
                                                                                      )
         else:
             built_road, done, state, building_speed = road_points.three_points_to_road_curve(road_manager=road_points,
                 built_road_points=input_points,
-                tile_size=tile_size,
                 animated_points_per_tick=building_speed, state=state
             )
 
@@ -30,12 +28,12 @@ def build_road(dt, road_points: RoadManager, tile_size):
 
         # Update spatial partitioning
         tile_to_point = road_points.tile_to_point
-        add_to_tile_to_points_list(built_road, tile_to_point, road_id, road_points)
+        add_to_tile_to_points_list(built_road, tile_to_point, road_id)
 
 
 def find_hovered_points(points_to_check, mouse_pos_world):
     hovered = []
-
+    #print("points_to_check: ", points_to_check)
     for point in points_to_check:
         dx = abs(point.pos[0] - mouse_pos_world[0])
         dy = abs(point.pos[1] - mouse_pos_world[1])
@@ -62,20 +60,20 @@ def find_possible_hovered_road_points(hovered_tile, road_points: RoadManager):
 
 
 
-def tick(dt, road_points: RoadManager, mouse_pos, tile_size, hovered_tile, offset_x, offset_y, current_zoom):
+def tick(dt, road_points: RoadManager, mouse_pos, hovered_tile, camera):
     # Convert screen → world → tile
-    mouse_world_pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
-    mouse_tile_pos = world_space_to_tile_space(mouse_world_pos, tile_size, True)
+    mouse_world_pos = camera.screen_to_world(mouse_pos)
+    mouse_tile_pos = camera.world_to_tile(mouse_world_pos)
 
     # Build new road segments if needed
-    build_road(dt, road_points, tile_size)
+    build_road(dt, road_points)
 
     # Get possible road points near mouse
     nearby_points = find_possible_hovered_road_points(hovered_tile, road_points)
 
     # Check which of those the mouse is actually over
     hovered_points = find_hovered_points(nearby_points, mouse_world_pos)
-
+    #print("mouse is actually over: ", hovered_points)
 
     return nearby_points, hovered_points
 

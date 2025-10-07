@@ -8,52 +8,50 @@ tile_neighbor_offsets = [
 ]
 
 
-def screen_space_to_tile_space(mouse_pos, offset_x, offset_y, zoom, tile_size):
-    world_pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, zoom)
-    tx, ty = world_space_to_tile_space(world_pos, tile_size, True)
-    return tx, ty
+class Camera:
+    def __init__(self, offset_x=0, offset_y=0, zoom=1.0, tile_size=32):
+        self.offset_x = offset_x
+        self.offset_y = offset_y
+        self.zoom = zoom
+        self.tile_size = tile_size
 
-
-def world_space_to_tile_space(world_pos, tile_size, tile_snapping=False):
-    wx, wy = world_pos
-    if tile_snapping:
-        tx = wx // tile_size
-        ty = wy // tile_size
-    else:
-        tx = wx / tile_size
-        ty = wy / tile_size
-    return tx, ty
-
-
-def tile_space_to_world_space(tile_pos, tile_size):
-    tx, ty = tile_pos
-    wx = tx * tile_size
-    wy = ty * tile_size
-    return wx, wy
-
-
-def screen_space_to_world_space(screen_pos, offset_x, offset_y, zoom):
-    if type(screen_pos) == tuple:
+    # --- conversions ---
+    def screen_to_world(self, screen_pos):
         sx, sy = screen_pos
-        wx = (sx / zoom) + offset_x
-        wy = (sy / zoom) + offset_y
+        wx = (sx / self.zoom) + self.offset_x
+        wy = (sy / self.zoom) + self.offset_y
         return wx, wy
-    else:
-        ws = (screen_pos / zoom) + offset_x
-        return ws
 
+    def world_to_screen(self, world_pos):
+        wx, wy = world_pos
+        sx = (wx - self.offset_x) * self.zoom
+        sy = (wy - self.offset_y) * self.zoom
+        return sx, sy
 
-def world_space_to_screen_space(world_pos, offset_x, offset_y, zoom):
-    wx, wy = world_pos
-    sx = (wx - offset_x) * zoom
-    sy = (wy - offset_y) * zoom
-    return sx, sy
+    def world_to_tile(self, world_pos, snap=True):
+        wx, wy = world_pos
+        if snap:
+            tx = int(wx // self.tile_size)
+            ty = int(wy // self.tile_size)
+        else:
+            tx = wx / self.tile_size
+            ty = wy / self.tile_size
+        return tx, ty
 
+    def tile_to_world(self, tile_pos):
+        tx, ty = tile_pos
+        wx = tx * self.tile_size
+        wy = ty * self.tile_size
+        return wx, wy
 
-def tile_space_to_screen_space(tile_pos, offset_x, offset_y, zoom, tile_size):
-    world_pos = tile_space_to_world_space(tile_pos, tile_size)
-    screen_pos = world_space_to_screen_space(world_pos, offset_x, offset_y, zoom)
-    return screen_pos[0], screen_pos[1]
+    def screen_to_tile(self, screen_pos, snap=True):
+        world_pos = self.screen_to_world(screen_pos)
+        return self.world_to_tile(world_pos, snap)
+
+    def tile_to_screen(self, tile_pos):
+        world_pos = self.tile_to_world(tile_pos)
+        return self.world_to_screen(world_pos)
+
 
 
 def calculate_distance(point1, point2):
@@ -74,93 +72,143 @@ def bezier_point(p0, p1, p2, t):
     return x, y
 
 
-def add_to_tile_to_points_list(road, tile_to_point, new_id, road_points):
+def add_to_tile_to_points_list(road, tile_to_point, new_id):
     for point in road:
-        # road: [((tile_pos), (point_pos)),...]
-        # point: ((tile_pos), (point_pos))
-        tile_positions = tile_to_point.keys()
-        # tile_positions: all tile positions (tile_pos)
-        if point.tile_pos in tile_positions:
-            road_ids = tile_to_point[point.tile_pos].keys()
-            if new_id in road_ids:
-                #print("Appended: ", (tile_pos, new_id))
-                road_points.tile_to_point[point.tile_pos][new_id].append(point)
+        # Ensure a dict exists for this tile
+        tile_dict = tile_to_point.setdefault(point.tile_pos, {})
+
+        # Ensure a list exists for this road_id in that tile
+        points_list = tile_dict.setdefault(new_id, [])
+
+        # Append only if not already present
+        if point not in points_list:
+            points_list.append(point)
+
+
+def replace_point_on_map(road_points, point_to_replace, point_to_add):
+    prior_destinations = []
+    prior_sources = []
+
+    prior_destinations.extend(point_to_replace.destinations)
+    prior_sources.extend(point_to_replace.sources)
+    if point_to_replace in prior_destinations:
+        prior_destinations.remove(point_to_replace)
+    if point_to_replace in prior_sources:
+        prior_sources.remove(point_to_replace)
+    point_to_add.destinations.extend(prior_destinations)
+    point_to_add.sources.extend(prior_sources)
+    for source_point in prior_sources:
+        source_point.destinations.append(point_to_add)
+    for destination_point in prior_destinations:
+        destination_point.sources.append(point_to_add)
+
+    remove_point_from_map(road_points=road_points, point_to_remove=point_to_replace, point_to_add=point_to_add)
+
+
+def remove_point_from_map(road_points, point_to_remove, point_to_add=None):
+    drawing = road_points.drawing
+    tile_to_point = road_points.tile_to_point
+
+    # find road + index
+    road_key, idx = None, None
+    for rk, points in list(drawing.items()):
+        for i, point in enumerate(points):
+            if point is point_to_remove:
+                road_key, idx = rk, i
+                break
+        if road_key is not None:
+            break
+    if road_key is None:
+        return  # not found
+
+    points = drawing[road_key]
+
+    # cleanup connections
+    for connected_point in point_to_remove.destinations + point_to_remove.sources:
+        if point_to_remove in connected_point.sources:
+            connected_point.sources.remove(point_to_remove)
+        if point_to_remove in connected_point.destinations:
+            connected_point.destinations.remove(point_to_remove)
+
+    # cleanup tile mapping (by identity!)
+    if point_to_remove.tile_pos in tile_to_point:
+        if road_key in tile_to_point[point_to_remove.tile_pos]:
+            point_list = tile_to_point[point_to_remove.tile_pos][road_key]
+            if isinstance(point_list, tuple):  # (list, set)
+                lst, seen = point_list
+                if point_to_remove in lst:
+                    lst.remove(point_to_remove)
+                    seen.discard(id(point_to_remove))
             else:
-                #print("Created: ", new_id)
-                road_points.tile_to_point[point.tile_pos][new_id] = [point]
-        else:
-            #print("Created: ", tile_pos, new_id)
-            road_points.tile_to_point[point.tile_pos] = {new_id: [point]}
+                # old style plain list
+                point_list[:] = [p for p in point_list if p is not point_to_remove]
 
-def replace_point_on_map(road_points, point_to_replace, points_to_add):
-    for point in points_to_add:
-        prior_destinations = []
-        prior_sources = []
+            if not point_list:
+                del tile_to_point[point_to_remove.tile_pos][road_key]
+                if not tile_to_point[point_to_remove.tile_pos]:
+                    del tile_to_point[point_to_remove.tile_pos]
 
-        for replaced_point in point_to_replace:
-            prior_destinations.extend(replaced_point.destinations)
-            prior_sources.extend(replaced_point.sources)
-        for replaced_point in point_to_replace:
-            if replaced_point in prior_destinations:
-                prior_destinations.remove(replaced_point)
-            if replaced_point in prior_sources:
-                prior_sources.remove(replaced_point)
-        point.destinations.extend(prior_destinations)
-        point.sources.extend(prior_sources)
-        for source_point in prior_sources:
-            source_point.destinations.append(point)
-        for destination_point in prior_destinations:
-            destination_point.sources.append(point)
+    # replacement
+    if point_to_add is not None:
+        points[idx] = point_to_add
+        if len(points) < 2:
+            _delete_road(drawing, road_key)
+        return
 
-    remove_point_from_map(road_points=road_points, points=point_to_replace)
+    # actually remove
+    del points[idx]
 
+    # rebuild road segments
+    if len(points) < 2:
+        _delete_road(drawing, road_key)
+        return
 
-def remove_point_from_map(road_points, points):
-    drawing = road_points.drawing  # road_id → list of (tile_pos, point_object)
-    tile_to_point = road_points.tile_to_point  # tile_pos → {road_id: [(world_pos, size)]}
+    segments, cur = [], []
+    for point in points:
+        cur.append(point)
+    if cur:
+        segments.append(cur)
 
-    for point_to_remove in points:
-        for road_id, road in drawing.items():
-            for i, point in enumerate(road):
-                if point_to_remove.pos == point.pos:
-                    connected_points = []
-                    connected_points.extend(road[i].destinations)
-                    connected_points.extend(road[i].sources)
-                    for connected_point in connected_points:
-                        if point in connected_point.sources:
-                            connected_point.sources.remove(point)
-                        if point in connected_point.destinations:
-                            connected_point.destinations.remove(point)
-                    # remove from drawing road
-                    del road[i]
-
-                    if point.tile_pos in tile_to_point:
-                        if road_id in tile_to_point[point.tile_pos]:
-                            point_list = tile_to_point[point.tile_pos][road_id]
-                            point_list[:] = [p for p in point_list if p.pos != point.pos]
-
-                            # Clean up empty containers
-                            if not point_list:
-                                del tile_to_point[point.tile_pos][road_id]
-                                if not tile_to_point[point.tile_pos]:
-                                    del tile_to_point[point.tile_pos]
-                    break  # Only remove once per hovered_pos
+    # assign back
+    drawing[road_key] = segments[0]
+    for seg in segments[1:]:
+        _create_road(drawing, seg)
 
 
-def remove_tight_points(road_points, points_to_add=None, hovered_points=None):
-    if points_to_add is None:
-        points_to_add = []
-    points_to_remove = []
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def remove_tight_points(road_points, point_to_add=None, hovered_points=None):
+    #print("Hovered_points: ", hovered_points)
+    if point_to_add is None:
+        point_to_add = []
+    point_to_remove = None
     current_road_points = road_points.current
     #print("CURRENT: ", current_road_points)
     all_road_points = road_points.drawing
     if hovered_points:
-        for hovered_point in hovered_points:
-            for road_key in all_road_points:
-                for point in all_road_points[road_key]:
-                    hovered_point_pos = hovered_point.pos
-                    if point.pos == hovered_point_pos:
-                        points_to_remove.append(point)
+        hovered_point = hovered_points[0]
+        for road_key in all_road_points:
+            for point in all_road_points[road_key]:
+                hovered_point_pos = hovered_point.pos
+                #print(point, hovered_point)
+                if point.pos == hovered_point_pos:
+                    point_to_remove = point
+                    print("Hover point: ", point)
+                    break
+            break
     else:
         for current_point in current_road_points:
             for road_key in all_road_points:
@@ -168,15 +216,38 @@ def remove_tight_points(road_points, points_to_add=None, hovered_points=None):
                     dx = abs(point.pos[0] - current_point.pos[0])
                     dy = abs(point.pos[1] - current_point.pos[1])
                     if dx <= point.point_size * 1 and dy <= point.point_size * 1:
-                        points_to_remove.append(point)
-    if not points_to_remove:
-        #print("No tight points found, skipping removal.")
+                        point_to_remove = point
+                        break
+                break
+            break
+
+    if not point_to_remove:
+        print(point_to_remove)
+        print("No tight points found, skipping removal.")
         return
 
-    if points_to_add:
+    if point_to_add:
         #print("Removing hovered: ", points_to_remove)
         #print("points_to_add: ", points_to_add)
-        replace_point_on_map(road_points, points_to_remove, points_to_add)
+        replace_point_on_map(road_points, point_to_remove, point_to_add)
     else:
-        #print("Removing: ", points_to_remove)
-        remove_point_from_map(road_points, points_to_remove)
+        print("Removing: ", point_to_remove)
+        remove_point_from_map(road_points, point_to_remove)
+
+def _next_new_id(drawing):
+    used = set(drawing.keys())
+    nid = 0
+    while nid in used:
+        nid += 1
+    return nid
+
+def _create_road(drawing, pts):
+    if len(pts) < 2:
+        return None
+    nid = _next_new_id(drawing)
+    drawing[nid] = pts
+    return nid
+
+def _delete_road(drawing, road_key):
+    if road_key in drawing:
+        del drawing[road_key]

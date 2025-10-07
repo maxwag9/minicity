@@ -6,7 +6,7 @@ import game
 def profile_game():
     profiler = cProfile.Profile()
     profiler.enable()
-    wgame.main()
+    game.main()
     profiler.disable()
 
     # Save profiling data

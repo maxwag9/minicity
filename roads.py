@@ -1,41 +1,41 @@
-from helper import get_vector, world_space_to_tile_space, bezier_point, calculate_distance, screen_space_to_world_space, \
-    add_to_tile_to_points_list, remove_tight_points
+from helper import *
 
 
 
 class RoadManager:
-    def __init__(self):
+    def __init__(self, camera):
         self.all_points = []
         self.current = []
         self.drawing = {}
         self.to_build = {}
         self.tile_to_point = {}
+        self.camera = camera
 
-    def build_road(self, road_type, mouse_pos, offset_x, offset_y, current_zoom, tile_size, point_size, road_points, hovered_points, building_speed=1):
-        pos = screen_space_to_world_space(mouse_pos, offset_x, offset_y, current_zoom)
-        points_to_add = []
+    def build_road(self, road_type, mouse_pos, point_size, road_points, hovered_points, building_speed=0):
+        pos = self.camera.screen_to_world(mouse_pos)
+        point_to_add = None
         anchor_point_amount = 0
         # Build road with 2 points; A -> B
         if len(self.current) == 0:
             # Point A
-            point_a = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+            point_a = Point(self.camera.world_to_tile(pos), pos, point_size, vector=None)
             self.current.append(point_a)
             anchor_point_amount = 1
-            points_to_add.extend(self.current)
+            point_to_add = self.current[0]
         elif len(self.current) == 1:
             # Point B
-            point_b = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+            point_b = Point(self.camera.world_to_tile(pos), pos, point_size, vector=None)
             self.current.append(point_b)
             anchor_point_amount = 2
             if self.current[0].pos != self.current[1].pos:
-                points_to_add.append(point_b)
+                point_to_add = point_b
         elif len(self.current) == 2:
             if road_type[0] == "curved_road":
                 # Point C
-                point_c = Point(world_space_to_tile_space(pos, tile_size, True), pos, point_size, vector=None)
+                point_c = Point(self.camera.world_to_tile(pos), pos, point_size, vector=None)
                 self.current.append(point_c)
                 anchor_point_amount = 3
-                points_to_add.append(point_c)
+                point_to_add = point_c
 
 
         if anchor_point_amount == 2 and road_type[0] == "straight_road":
@@ -46,14 +46,14 @@ class RoadManager:
 
             temp_road_points = self.current.copy()
 
-            road, done, state, building_speed = self.two_points_to_road(road_manager=road_points, state=(True, 0, temp_road_points), tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
+            road, done, state, building_speed = self.two_points_to_road(state=(True, 0, temp_road_points), point_size=point_size, animated_points_per_tick=building_speed)
             self.drawing[new_id] = road
             if not done:
                 self.to_build[new_id] = road, road_type, state, building_speed
 
             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
             tile_to_point = self.tile_to_point
-            add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
+            add_to_tile_to_points_list(road, tile_to_point, new_id)
             self.current = []
 
         elif anchor_point_amount == 3 and road_type[0] == "curved_road":
@@ -62,17 +62,16 @@ class RoadManager:
             while new_id in used_ids:
                 new_id += 1
             temp_road_points = self.current.copy()
-            road, done, state, building_speed = self.three_points_to_road_curve(road_manager=road_points, state=(True, 0, temp_road_points), tile_size=tile_size, point_size=point_size, animated_points_per_tick=building_speed)
+            road, done, state, building_speed = self.three_points_to_road_curve(state=(True, 0, temp_road_points), point_size=point_size, animated_points_per_tick=building_speed)
             self.drawing[new_id] = road
             if not done:
                 self.to_build[new_id] = road, road_type, state, building_speed
 
             # road_points[3]: {tile_pos:{road_id:[(point_pos),...]}}
             tile_to_point = self.tile_to_point
-            add_to_tile_to_points_list(road, tile_to_point, new_id, road_points)
+            add_to_tile_to_points_list(road, tile_to_point, new_id)
             self.current = []
-        print(points_to_add)
-        remove_tight_points(road_points, points_to_add=points_to_add, hovered_points=hovered_points)
+        remove_tight_points(road_points, point_to_add=point_to_add, hovered_points=hovered_points)
 
 
     def find_all_point_vectors_for_all_roads(self):
@@ -91,12 +90,10 @@ class RoadManager:
                 road[i][3] = vector
                 road[i][4] = -vector
 
-    @staticmethod
-    def two_points_to_road(road_manager,
+    def two_points_to_road(self,
             state=(True, 0, []),
             resolution=25,
             built_road_points=None,
-            tile_size=25,
             animated_points_per_tick=2,
             point_size=5):
         if built_road_points is None:
@@ -118,7 +115,7 @@ class RoadManager:
 
         def add_point(pos, with_vector_from=None):
             """Helper: create and append a Point, update previous vector if needed."""
-            tile_pos = world_space_to_tile_space(pos, tile_size, tile_snapping=True)
+            tile_pos = self.camera.world_to_tile(pos)
             new_point = Point(tile_pos, pos, point_size, None)
             built_road_points.append(new_point)
             add_vectors_from(with_vector_from, new_point)
@@ -186,12 +183,11 @@ class RoadManager:
 
         return built_road_points, done, (start, current_index, two_points), animated_points_per_tick
 
-    @staticmethod
-    def three_points_to_road_curve(road_manager,
+
+    def three_points_to_road_curve(self,
                                    state=(True, 0, []),
                                    resolution=30,
                                    built_road_points=None,
-                                   tile_size=25,
                                    animated_points_per_tick=2,
                                    point_size=5
                                    ):
@@ -224,7 +220,7 @@ class RoadManager:
 
         def add_point(pos, with_vector_from=None):
             """Helper: create and append a Point, update previous vector if needed."""
-            tile_pos = world_space_to_tile_space(pos, tile_size, tile_snapping=True)
+            tile_pos = self.camera.world_to_tile(pos)
             new_point = Point(tile_pos, pos, point_size, None)
             built_road_points.append(new_point)
             add_vectors_from(with_vector_from, new_point)
