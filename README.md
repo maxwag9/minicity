@@ -1,4 +1,7 @@
+<img width="1922" height="1111" alt="Screenshot_20251008_132252" src="https://github.com/user-attachments/assets/ff74566e-9b10-4aeb-9874-a5826fd5debe" />
+
 This is my first city game in python inspired by Cities Skylines. 
+
 Longterm goal is to switch to Rust and make a better, more performant CS2 kind of game! 
 
 This game is just there for me to learn about the technicalities of the CS backend, leaving out the graphics for now.
@@ -12,3 +15,4 @@ Here is the notion page for my programming goals with this project: https://www.
 
 
 Note that I only know python and will slowly get into rust. Any help is welcome!
+
